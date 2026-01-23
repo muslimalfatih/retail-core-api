@@ -70,16 +70,33 @@ func HealthCheck(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// CORS middleware
+func enableCORS(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		
+		// Handle preflight requests
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		
+		next(w, r)
+	}
+}
+
 func main() {
 	// Initialize default categories
 	initializeDefaultCategories()
 	
 	// Health check endpoint
-	http.HandleFunc("/health", HealthCheck)
+	http.HandleFunc("/health", enableCORS(HealthCheck))
 
 	// Category endpoints
-	http.HandleFunc("/categories", handlers.CategoriesHandler)
-	http.HandleFunc("/categories/", handlers.CategoryHandler)
+	http.HandleFunc("/categories", enableCORS(handlers.CategoriesHandler))
+	http.HandleFunc("/categories/", enableCORS(handlers.CategoryHandler))
 
 	// API Documentation endpoint
 	http.HandleFunc("/docs/", httpSwagger.WrapHandler)
