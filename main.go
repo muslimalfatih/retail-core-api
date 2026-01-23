@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 
 	httpSwagger "github.com/swaggo/http-swagger"
 )
@@ -70,40 +71,58 @@ func HealthCheck(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// CORS middleware
-func enableCORS(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-		
-		// Handle preflight requests
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
-		
-		next(w, r)
+// Global CORS middleware that wraps ALL handlers
+type corsMiddleware struct {
+	handler http.Handler
+}
+
+func (c *corsMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Set CORS headers for all requests
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept")
+	w.Header().Set("Access-Control-Max-Age", "3600")
+
+	// Handle preflight requests
+	if r.Method == "OPTIONS" {
+		w.WriteHeader(http.StatusOK)
+		return
 	}
+
+	// Call the next handler
+	c.handler.ServeHTTP(w, r)
+}
+
+func corsMiddlewareWrapper(handler http.Handler) http.Handler {
+	return &corsMiddleware{handler: handler}
 }
 
 func main() {
 	// Initialize default categories
 	initializeDefaultCategories()
-	
+
+	// Create a new ServeMux
+	mux := http.NewServeMux()
+
 	// Health check endpoint
-	http.HandleFunc("/health", enableCORS(HealthCheck))
+	mux.HandleFunc("/health", HealthCheck)
 
 	// Category endpoints
-	http.HandleFunc("/categories", enableCORS(handlers.CategoriesHandler))
-	http.HandleFunc("/categories/", enableCORS(handlers.CategoryHandler))
+	mux.HandleFunc("/categories", handlers.CategoriesHandler)
+	mux.HandleFunc("/categories/", handlers.CategoryHandler)
 
 	// API Documentation endpoint
-	http.HandleFunc("/docs/", httpSwagger.WrapHandler)
+	mux.HandleFunc("/docs/", httpSwagger.WrapHandler)
 
-	// Start server
-	fmt.Println("Server running on http://localhost:8080")
-	fmt.Println("API Documentation: http://localhost:8080/docs/index.html")
+	// Get port from environment 
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	// Start server with CORS middleware wrapping all routes
+	fmt.Printf("Server running on port %s\n", port)
+	fmt.Printf("API Documentation: http://localhost:%s/docs/index.html\n", port)
 	log.Println("Available endpoints:")
 	log.Println("  GET    /health")
 	log.Println("  GET    /categories")
@@ -111,8 +130,11 @@ func main() {
 	log.Println("  GET    /categories/{id}")
 	log.Println("  PUT    /categories/{id}")
 	log.Println("  DELETE /categories/{id}")
-	
-	err := http.ListenAndServe(":8080", nil)
+
+	// Wrap the entire mux with CORS middleware
+	handler := corsMiddlewareWrapper(mux)
+
+	err := http.ListenAndServe(":"+port, handler)
 	if err != nil {
 		log.Fatal("Failed to start server:", err)
 	}
