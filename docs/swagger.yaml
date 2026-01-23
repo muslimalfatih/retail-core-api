@@ -1,0 +1,232 @@
+basePath: /
+definitions:
+  models.Category:
+    description: Category information with ID, name and description
+    properties:
+      description:
+        example: Electronic devices and gadgets
+        type: string
+      id:
+        example: 1
+        type: integer
+      name:
+        example: Electronics
+        type: string
+    required:
+    - name
+    type: object
+  models.CategoryInput:
+    description: Input model for creating or updating a category (ID is auto-generated)
+    properties:
+      description:
+        example: Electronic devices and gadgets
+        type: string
+      name:
+        example: Electronics
+        type: string
+    required:
+    - name
+    type: object
+  models.Response:
+    description: Standard API response structure
+    properties:
+      data:
+        type: object
+      message:
+        example: Success
+        type: string
+      status:
+        example: true
+        type: boolean
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: support@example.com
+    name: API Support
+  description: |-
+    RESTful API for managing categories with full CRUD operations
+
+    ## Features:
+    - Get all categories
+    - Get category by ID
+    - Create new category
+    - Update existing category
+    - Delete category
+
+    ## Response Format:
+    All endpoints return a standard response with:
+    - status (bool): Request success status
+    - message (string): Response message
+    - data (object): Response data (when applicable)
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  title: Category Management API
+  version: "1.0"
+paths:
+  /categories:
+    get:
+      description: Retrieve a list of all categories
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully retrieved all categories
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/models.Category'
+                  type: array
+              type: object
+      summary: Get all categories
+      tags:
+      - Categories
+    post:
+      consumes:
+      - application/json
+      description: Add a new category to the database
+      parameters:
+      - description: Category object that needs to be added
+        in: body
+        name: category
+        required: true
+        schema:
+          $ref: '#/definitions/models.CategoryInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Category created successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.Category'
+              type: object
+        "400":
+          description: Invalid request body or validation error
+          schema:
+            $ref: '#/definitions/models.Response'
+      summary: Create a new category
+      tags:
+      - Categories
+  /categories/{id}:
+    delete:
+      description: Delete a category by its ID
+      parameters:
+      - description: Category ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Category deleted successfully
+          schema:
+            $ref: '#/definitions/models.Response'
+        "400":
+          description: Invalid category ID
+          schema:
+            $ref: '#/definitions/models.Response'
+        "404":
+          description: Category not found
+          schema:
+            $ref: '#/definitions/models.Response'
+      summary: Delete a category
+      tags:
+      - Categories
+    get:
+      description: Retrieve details of a specific category by its ID
+      parameters:
+      - description: Category ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Category retrieved successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.Category'
+              type: object
+        "400":
+          description: Invalid category ID
+          schema:
+            $ref: '#/definitions/models.Response'
+        "404":
+          description: Category not found
+          schema:
+            $ref: '#/definitions/models.Response'
+      summary: Get a category by ID
+      tags:
+      - Categories
+    put:
+      consumes:
+      - application/json
+      description: Update an existing category by its ID
+      parameters:
+      - description: Category ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Updated category object
+        in: body
+        name: category
+        required: true
+        schema:
+          $ref: '#/definitions/models.CategoryInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Category updated successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.Category'
+              type: object
+        "400":
+          description: Invalid request body or validation error
+          schema:
+            $ref: '#/definitions/models.Response'
+        "404":
+          description: Category not found
+          schema:
+            $ref: '#/definitions/models.Response'
+      summary: Update a category
+      tags:
+      - Categories
+  /health:
+    get:
+      description: Check if the API server is running
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Server is running
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Health check endpoint
+      tags:
+      - Health
+schemes:
+- http
+swagger: "2.0"
