@@ -36,9 +36,8 @@ import (
 // @license.name MIT
 // @license.url https://opensource.org/licenses/MIT
 
-// @host localhost:8080
 // @BasePath /
-// @schemes http
+// @schemes http https
 
 func initializeDefaultCategories() {
 	// Check if categories already exist

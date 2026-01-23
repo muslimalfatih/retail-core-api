@@ -39,7 +39,6 @@ definitions:
         example: true
         type: boolean
     type: object
-host: localhost:8080
 info:
   contact:
     email: support@example.com
@@ -229,4 +228,5 @@ paths:
       - Health
 schemes:
 - http
+- https
 swagger: "2.0"

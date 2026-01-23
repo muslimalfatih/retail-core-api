@@ -348,9 +348,9 @@ const docTemplate = `{
 // SwaggerInfo holds exported Swagger Info so clients can modify it
 var SwaggerInfo = &swag.Spec{
 	Version:          "1.0",
-	Host:             "localhost:8080",
+	Host:             "",
 	BasePath:         "/",
-	Schemes:          []string{"http"},
+	Schemes:          []string{"http", "https"},
 	Title:            "Category Management API",
 	Description:      "RESTful API for managing categories with full CRUD operations\n\n## Features:\n- Get all categories\n- Get category by ID\n- Create new category\n- Update existing category\n- Delete category\n\n## Response Format:\nAll endpoints return a standard response with:\n- status (bool): Request success status\n- message (string): Response message\n- data (object): Response data (when applicable)",
 	InfoInstanceName: "swagger",
