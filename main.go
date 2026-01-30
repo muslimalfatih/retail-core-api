@@ -4,26 +4,26 @@ import (
 	"category-management-api/database"
 	_ "category-management-api/docs"
 	"category-management-api/handlers"
-	"category-management-api/models"
+	"category-management-api/repositories"
+	"category-management-api/services"
 	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
 
+	"github.com/joho/godotenv"
 	httpSwagger "github.com/swaggo/http-swagger"
 )
 
 // @title Category Management API
 // @version 1.0
-// @description RESTful API for managing categories with full CRUD operations
+// @description RESTful API for managing categories and products with full CRUD operations
 // @description
 // @description ## Features:
-// @description - Get all categories
-// @description - Get category by ID
-// @description - Create new category
-// @description - Update existing category
-// @description - Delete category
+// @description - Category Management (Get all, Get by ID, Create, Update, Delete)
+// @description - Product Management (Get all with category names, Get by ID with category, Create, Update, Delete)
+// @description - Product-Category Relationship (Foreign key with JOIN operations)
 // @description
 // @description ## Response Format:
 // @description All endpoints return a standard response with:
@@ -39,22 +39,6 @@ import (
 
 // @BasePath /
 // @schemes http https
-
-func initializeDefaultCategories() {
-	// Check if categories already exist
-	if len(database.Categories) == 0 {
-		// Add initial categories
-		database.Categories = []models.Category{
-			{ID: 1, Name: "Electronics", Description: "Electronic devices and gadgets"},
-			{ID: 2, Name: "Clothing", Description: "Apparel and fashion items"},
-			{ID: 3, Name: "Books", Description: "Books, magazines, and publications"},
-			{ID: 4, Name: "Home & Garden", Description: "Home improvement and gardening supplies"},
-			{ID: 5, Name: "Sports", Description: "Sports equipment and accessories"},
-		}
-		database.NextID = 6
-		fmt.Println("✅ Initial categories created successfully")
-	}
-}
 
 // HealthCheck godoc
 // @Summary Health check endpoint
@@ -98,8 +82,42 @@ func corsMiddlewareWrapper(handler http.Handler) http.Handler {
 }
 
 func main() {
-	// Initialize default categories
-	initializeDefaultCategories()
+	// Load .env file
+	err := godotenv.Load()
+	if err != nil {
+		log.Println("Warning: .env file not found, using environment variables")
+	}
+
+	// ============================================
+	// DATABASE CONNECTION
+	// ============================================
+	db, err := database.ConnectPostgres()
+	if err != nil {
+		log.Fatal("Failed to connect to database:", err)
+	}
+	defer database.CloseDB()
+
+	// Run database migrations
+	err = database.RunMigrations(db)
+	if err != nil {
+		log.Fatal("Failed to run migrations:", err)
+	}
+
+	// ============================================
+	// LAYERED ARCHITECTURE - DEPENDENCY INJECTION
+	// ============================================
+
+	// 1. Initialize Repository Layer (Data Access)
+	categoryRepo := repositories.NewCategoryRepository(db)
+	productRepo := repositories.NewProductRepository(db)
+
+	// 2. Initialize Service Layer (Business Logic)
+	categoryService := services.NewCategoryService(categoryRepo)
+	productService := services.NewProductService(productRepo, categoryRepo)
+
+	// 3. Initialize Handler Layer (HTTP)
+	categoryHandler := handlers.NewCategoryHandler(categoryService)
+	productHandler := handlers.NewProductHandler(productService)
 
 	// Create a new ServeMux
 	mux := http.NewServeMux()
@@ -107,14 +125,18 @@ func main() {
 	// Health check endpoint
 	mux.HandleFunc("/health", HealthCheck)
 
-	// Category endpoints
-	mux.HandleFunc("/categories", handlers.CategoriesHandler)
-	mux.HandleFunc("/categories/", handlers.CategoryHandler)
+	// Category endpoints - using handler methods
+	mux.HandleFunc("/categories", categoryHandler.HandleCategories)
+	mux.HandleFunc("/categories/", categoryHandler.HandleCategoryByID)
+
+	// Product endpoints - using handler methods
+	mux.HandleFunc("/products", productHandler.HandleProducts)
+	mux.HandleFunc("/products/", productHandler.HandleProductByID)
 
 	// API Documentation endpoint
 	mux.HandleFunc("/docs/", httpSwagger.WrapHandler)
 
-	// Get port from environment 
+	// Get port from environment
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
@@ -130,11 +152,16 @@ func main() {
 	log.Println("  GET    /categories/{id}")
 	log.Println("  PUT    /categories/{id}")
 	log.Println("  DELETE /categories/{id}")
+	log.Println("  GET    /products")
+	log.Println("  POST   /products")
+	log.Println("  GET    /products/{id}")
+	log.Println("  PUT    /products/{id}")
+	log.Println("  DELETE /products/{id}")
 
 	// Wrap the entire mux with CORS middleware
 	handler := corsMiddlewareWrapper(mux)
 
-	err := http.ListenAndServe(":"+port, handler)
+	err = http.ListenAndServe(":"+port, handler)
 	if err != nil {
 		log.Fatal("Failed to start server:", err)
 	}
