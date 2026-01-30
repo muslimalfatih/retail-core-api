@@ -1,13 +1,24 @@
 package handlers
 
 import (
-	"category-management-api/database"
 	"category-management-api/models"
+	"category-management-api/services"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"strconv"
 	"strings"
 )
+
+// CategoryHandler handles HTTP requests for categories
+type CategoryHandler struct {
+	service services.CategoryService
+}
+
+// NewCategoryHandler creates a new category handler instance
+func NewCategoryHandler(service services.CategoryService) *CategoryHandler {
+	return &CategoryHandler{service: service}
+}
 
 // GetAllCategories godoc
 // @Summary Get all categories
@@ -16,8 +27,17 @@ import (
 // @Produce json
 // @Success 200 {object} models.Response{data=[]models.Category} "Successfully retrieved all categories"
 // @Router /categories [get]
-func GetAllCategories(w http.ResponseWriter, r *http.Request) {
-	categories := database.GetAllCategories()
+func (h *CategoryHandler) GetAllCategories(w http.ResponseWriter, r *http.Request) {
+	categories, err := h.service.GetAllCategories()
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(models.Response{
+			Status:  false,
+			Message: "Failed to retrieve categories: " + err.Error(),
+		})
+		return
+	}
+
 	response := models.Response{
 		Status:  true,
 		Message: "Successfully retrieved all categories",
@@ -37,7 +57,7 @@ func GetAllCategories(w http.ResponseWriter, r *http.Request) {
 // @Success 201 {object} models.Response{data=models.Category} "Category created successfully"
 // @Failure 400 {object} models.Response "Invalid request body or validation error"
 // @Router /categories [post]
-func CreateCategory(w http.ResponseWriter, r *http.Request) {
+func (h *CategoryHandler) CreateCategory(w http.ResponseWriter, r *http.Request) {
 	var newCategory models.Category
 	err := json.NewDecoder(r.Body).Decode(&newCategory)
 	if err != nil {
@@ -49,18 +69,17 @@ func CreateCategory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validation
-	if newCategory.Name == "" {
+	// Call service to create category (validation is in service layer)
+	createdCategory, err := h.service.CreateCategory(newCategory)
+	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(models.Response{
 			Status:  false,
-			Message: "Category name is required",
+			Message: err.Error(),
 		})
 		return
 	}
 
-	// Add category to database
-	createdCategory := database.AddCategory(newCategory)
 	w.WriteHeader(http.StatusCreated)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(models.Response{
@@ -70,15 +89,15 @@ func CreateCategory(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// CategoriesHandler handles /categories endpoint
-func CategoriesHandler(w http.ResponseWriter, r *http.Request) {
+// HandleCategories handles /categories endpoint
+func (h *CategoryHandler) HandleCategories(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	switch r.Method {
 	case http.MethodGet:
-		GetAllCategories(w, r)
+		h.GetAllCategories(w, r)
 	case http.MethodPost:
-		CreateCategory(w, r)
+		h.CreateCategory(w, r)
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		json.NewEncoder(w).Encode(models.Response{
@@ -98,9 +117,18 @@ func CategoriesHandler(w http.ResponseWriter, r *http.Request) {
 // @Failure 400 {object} models.Response "Invalid category ID"
 // @Failure 404 {object} models.Response "Category not found"
 // @Router /categories/{id} [get]
-func GetCategoryByID(w http.ResponseWriter, r *http.Request, id int) {
-	category, found := database.GetCategoryByID(id)
-	if !found {
+func (h *CategoryHandler) GetCategoryByID(w http.ResponseWriter, r *http.Request, id int) {
+	category, err := h.service.GetCategoryByID(id)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(models.Response{
+			Status:  false,
+			Message: "Failed to retrieve category: " + err.Error(),
+		})
+		return
+	}
+
+	if category == nil {
 		w.WriteHeader(http.StatusNotFound)
 		json.NewEncoder(w).Encode(models.Response{
 			Status:  false,
@@ -129,7 +157,7 @@ func GetCategoryByID(w http.ResponseWriter, r *http.Request, id int) {
 // @Failure 400 {object} models.Response "Invalid request body or validation error"
 // @Failure 404 {object} models.Response "Category not found"
 // @Router /categories/{id} [put]
-func UpdateCategory(w http.ResponseWriter, r *http.Request, id int) {
+func (h *CategoryHandler) UpdateCategory(w http.ResponseWriter, r *http.Request, id int) {
 	var updatedCategory models.Category
 	err := json.NewDecoder(r.Body).Decode(&updatedCategory)
 	if err != nil {
@@ -141,23 +169,17 @@ func UpdateCategory(w http.ResponseWriter, r *http.Request, id int) {
 		return
 	}
 
-	// Validation
-	if updatedCategory.Name == "" {
-		w.WriteHeader(http.StatusBadRequest)
+	// Call service to update category (validation is in service layer)
+	category, err := h.service.UpdateCategory(id, updatedCategory)
+	if err != nil {
+		if err.Error() == "category not found" {
+			w.WriteHeader(http.StatusNotFound)
+		} else {
+			w.WriteHeader(http.StatusBadRequest)
+		}
 		json.NewEncoder(w).Encode(models.Response{
 			Status:  false,
-			Message: "Category name is required",
-		})
-		return
-	}
-
-	// Update category
-	category, found := database.UpdateCategory(id, updatedCategory)
-	if !found {
-		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(models.Response{
-			Status:  false,
-			Message: "Category not found",
+			Message: err.Error(),
 		})
 		return
 	}
@@ -180,13 +202,21 @@ func UpdateCategory(w http.ResponseWriter, r *http.Request, id int) {
 // @Failure 400 {object} models.Response "Invalid category ID"
 // @Failure 404 {object} models.Response "Category not found"
 // @Router /categories/{id} [delete]
-func DeleteCategory(w http.ResponseWriter, r *http.Request, id int) {
-	deleted := database.DeleteCategory(id)
-	if !deleted {
-		w.WriteHeader(http.StatusNotFound)
+func (h *CategoryHandler) DeleteCategory(w http.ResponseWriter, r *http.Request, id int) {
+	err := h.service.DeleteCategory(id)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			w.WriteHeader(http.StatusNotFound)
+			json.NewEncoder(w).Encode(models.Response{
+				Status:  false,
+				Message: "Category not found",
+			})
+			return
+		}
+		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(models.Response{
 			Status:  false,
-			Message: "Category not found",
+			Message: "Failed to delete category: " + err.Error(),
 		})
 		return
 	}
@@ -198,8 +228,8 @@ func DeleteCategory(w http.ResponseWriter, r *http.Request, id int) {
 	})
 }
 
-// CategoryHandler handles /categories/{id} endpoint
-func CategoryHandler(w http.ResponseWriter, r *http.Request) {
+// HandleCategoryByID handles /categories/{id} endpoint
+func (h *CategoryHandler) HandleCategoryByID(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	// Extract ID from path
@@ -216,11 +246,11 @@ func CategoryHandler(w http.ResponseWriter, r *http.Request) {
 
 	switch r.Method {
 	case http.MethodGet:
-		GetCategoryByID(w, r, id)
+		h.GetCategoryByID(w, r, id)
 	case http.MethodPut:
-		UpdateCategory(w, r, id)
+		h.UpdateCategory(w, r, id)
 	case http.MethodDelete:
-		DeleteCategory(w, r, id)
+		h.DeleteCategory(w, r, id)
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		json.NewEncoder(w).Encode(models.Response{
