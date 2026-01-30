@@ -2,7 +2,7 @@ package main
 
 import (
 	"category-management-api/database"
-	_ "category-management-api/docs"
+	"category-management-api/docs"
 	"category-management-api/handlers"
 	"category-management-api/repositories"
 	"category-management-api/services"
@@ -109,6 +109,15 @@ func main() {
 	err := godotenv.Load()
 	if err != nil {
 		log.Println("Warning: .env file not found, using environment variables")
+	}
+
+	// Configure Swagger for production (HTTPS) or local (HTTP)
+	if os.Getenv("APP_ENV") == "production" {
+		docs.SwaggerInfo.Host = "category-management-apis.zeabur.app"
+		docs.SwaggerInfo.Schemes = []string{"https"}
+	} else {
+		docs.SwaggerInfo.Host = "localhost:8080"
+		docs.SwaggerInfo.Schemes = []string{"http"}
 	}
 
 	// ============================================
