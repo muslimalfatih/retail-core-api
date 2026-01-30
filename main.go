@@ -55,6 +55,28 @@ func HealthCheck(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// RootHandler shows API information
+func RootHandler(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+		return
+	}
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"name":        "Category Management API",
+		"version":     "1.0",
+		"status":      "running",
+		"description": "RESTful API for managing categories and products",
+		"endpoints": map[string]string{
+			"documentation": "/docs/index.html",
+			"health":        "/health",
+			"categories":    "/categories",
+			"products":      "/products",
+		},
+	})
+}
+
 // Global CORS middleware that wraps ALL handlers
 type corsMiddleware struct {
 	handler http.Handler
@@ -63,13 +85,14 @@ type corsMiddleware struct {
 func (c *corsMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Set CORS headers for all requests
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept")
-	w.Header().Set("Access-Control-Max-Age", "3600")
+	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, X-Requested-With")
+	w.Header().Set("Access-Control-Allow-Credentials", "true")
+	w.Header().Set("Access-Control-Max-Age", "86400")
 
 	// Handle preflight requests
 	if r.Method == "OPTIONS" {
-		w.WriteHeader(http.StatusOK)
+		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 
@@ -121,6 +144,9 @@ func main() {
 
 	// Create a new ServeMux
 	mux := http.NewServeMux()
+
+	// Root endpoint - API information
+	mux.HandleFunc("/", RootHandler)
 
 	// Health check endpoint
 	mux.HandleFunc("/health", HealthCheck)
