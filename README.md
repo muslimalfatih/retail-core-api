@@ -1,154 +1,311 @@
-# Category Management API
+# Category & Product Management API
 
-Managing categories operations
+RESTful API for managing categories and products with layered architecture pattern, built with Go and PostgreSQL.
+
+## Architecture
+
+This project implements **Layered Architecture** (also known as N-Tier Architecture) with clear separation of concerns:
+
+```
+┌─────────────────────────────────────┐
+│         Handler Layer               │  ← HTTP Request/Response handling
+│  (Presentation/API Layer)           │
+├─────────────────────────────────────┤
+│         Service Layer               │  ← Business Logic & Validation
+│  (Business Logic Layer)             │
+├─────────────────────────────────────┤
+│       Repository Layer              │  ← Data Access & Persistence
+│  (Data Access Layer)                │
+├─────────────────────────────────────┤
+│           Database                  │  ← PostgreSQL (Supabase)
+│  (Data Storage)                     │
+└─────────────────────────────────────┘
+```
+
+### Layer Responsibilities
+
+1. **Handler Layer** (`handlers/`)
+   - Receives HTTP requests
+   - Validates request format
+   - Returns HTTP responses
+   - Error: Request/Response issues
+
+2. **Service Layer** (`services/`)
+   - Business logic validation
+   - Data transformation
+   - Orchestrates repository calls
+   - Error: Business logic issues
+
+3. **Repository Layer** (`repositories/`)
+   - Database queries
+   - Data persistence
+   - SQL operations
+   - Error: Database issues
+
+4. **Model Layer** (`models/`)
+   - Data structures
+   - Request/Response schemas
 
 ## Features
 
+### Categories Management
 - Get all categories
 - Get category by ID
 - Create new category
 - Update existing category
 - Delete category
+
+### Products Management
+- Get all products 
+- Get product by ID
+- Create new product
+- Update existing product
+- Delete product
+- Optional category relationship (Foreign Key)
+- Category validation on create/update
+
+### Technical Features
+- Layered Architecture with Dependency Injection
+- PostgreSQL database with `pgx/v5` driver (optimized for Supabase)
+- Connection pooling with lifecycle management
+- Environment-based configuration
+- Automatic database migrations
+- SQL JOIN for product-category relationships
+- Foreign Key constraints with ON DELETE SET NULL
+- Database indexes for performance
+- CORS enabled for all endpoints
 - Swagger/OpenAPI documentation
-- Hot reload for development
+- Standard JSON response format
 
-## Prerequisites
+## Getting Started
 
-- Go 1.25+ installed
-- Air (for hot reload) - will be installed automatically
+### Prerequisites
 
-## Installation
+- Go 1.24 or higher
+- PostgreSQL database (or Supabase account)
+- Supabase connection with SSL enabled
+
+### Installation
 
 1. Clone the repository
-2. Install dependencies:
+```bash
+git clone <your-repo-url>
+cd category-management-api
+```
+
+2. Install dependencies
 ```bash
 go mod download
 ```
 
-3. Install Air for hot reload (if not already installed):
+3. Configure environment variables
 ```bash
-go install github.com/air-verse/air@latest
+cp .env.example .env
+# Edit .env with your Supabase credentials
+# Important: Add ?sslmode=require to your DATABASE_URL
 ```
 
-## Running the Application
-
-### Development Mode (with hot reload)
-
-```bash
-# Using air
-air
-
-# Or using the full path
-~/go/bin/air
+**Example `.env`:**
+```env
+DATABASE_URL=postgresql://postgres.[PROJECT_ID]:[PASSWORD]@aws-1-ap-south-1.pooler.supabase.com:6543/postgres?sslmode=require
+PORT=8080
 ```
 
-The server will automatically restart when you make changes to any `.go` files.
-
-### Production Mode (without hot reload)
-
+4. Run the application
 ```bash
 go run main.go
 ```
 
+The server will start on `http://localhost:8080` and automatically:
+- Connect to PostgreSQL
+- Run database migrations (create tables if needed)
+- Set up all API routes
+
 ## API Documentation
 
-Once the server is running, access the Swagger UI at:
-- **Swagger UI**: http://localhost:8080/docs/index.html
-- **Swagger JSON**: http://localhost:8080/docs/doc.json
+### Swagger UI
+Access interactive API documentation at: `http://localhost:8080/docs/index.html`
 
-## Endpoints
+### Available Endpoints
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/health` | Health check |
-| GET | `/categories` | Get all categories |
-| POST | `/categories` | Create a new category |
-| GET | `/categories/{id}` | Get a category by ID |
-| PUT | `/categories/{id}` | Update a category |
-| DELETE | `/categories/{id}` | Delete a category |
-
-## Example Requests
-
-### Get All Categories
-```bash
-curl http://localhost:8080/categories
+#### Root & Health
+```
+GET /       - API information and available endpoints
+GET /health - Check API status
 ```
 
-### Create a Category
+#### Categories
+```
+GET    /categories     - Get all categories
+POST   /categories     - Create a new category
+GET    /categories/:id - Get category by ID
+PUT    /categories/:id - Update category
+DELETE /categories/:id - Delete category
+```
+
+#### Products
+```
+GET    /products     - Get all products (with category names)
+POST   /products     - Create a new product
+GET    /products/:id - Get product by ID (with category name)
+PUT    /products/:id - Update product
+DELETE /products/:id - Delete product
+```
+
+### Request/Response Examples
+
+#### Create Category
 ```bash
 curl -X POST http://localhost:8080/categories \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "Technology",
-    "description": "Technology and gadgets"
+    "name": "Electronics",
+    "description": "Electronic devices and gadgets"
   }'
 ```
 
-### Get Category by ID
-```bash
-curl http://localhost:8080/categories/1
-```
-
-### Update a Category
-```bash
-curl -X PUT http://localhost:8080/categories/1 \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Electronics & Tech",
-    "description": "Updated description"
-  }'
-```
-
-### Delete a Category
-```bash
-curl -X DELETE http://localhost:8080/categories/1
-```
-
-## Response Format
-
-All endpoints return a standard response:
+Response:
 ```json
 {
   "status": true,
-  "message": "Success message",
-  "data": { }
+  "message": "Category created successfully",
+  "data": {
+    "id": 1,
+    "name": "Electronics",
+    "description": "Electronic devices and gadgets",
+    "created_at": "2024-01-30T12:00:00Z",
+    "updated_at": "2024-01-30T12:00:00Z"
+  }
 }
 ```
 
-## Initial Data
+#### Create Product (with category)
+```bash
+curl -X POST http://localhost:8080/products \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "iPhone 15 Pro",
+    "price": 15000000,
+    "stock": 50,
+    "category_id": 1
+  }'
+```
 
-The application comes with 5 pre-loaded categories:
-1. Electronics
-2. Clothing
-3. Books
-4. Home & Garden
-5. Sports
+Response:
+```json
+{
+  "status": true,
+  "message": "Product created successfully",
+  "data": {
+    "id": 1,
+    "name": "iPhone 15 Pro",
+    "price": 15000000,
+    "stock": 50,
+    "category_id": 1,
+    "category_name": "Electronics",
+    "created_at": "2024-01-30T12:00:00Z",
+    "updated_at": "2024-01-30T12:00:00Z"
+  }
+}
+```
+
+#### Get Product by ID (with JOIN)
+```bash
+curl http://localhost:8080/products/1
+```
+
+Response shows product with category name fetched via SQL JOIN:
+```json
+{
+  "status": true,
+  "message": "Product retrieved successfully",
+  "data": {
+    "id": 1,
+    "name": "iPhone 15 Pro",
+    "price": 15000000,
+    "stock": 50,
+    "category_id": 1,
+    "category_name": "Electronics",
+    "created_at": "2024-01-30T12:00:00Z",
+    "updated_at": "2024-01-30T12:00:00Z"
+  }
+}
+```
+
+## Database Schema
+
+### Categories Table
+```sql
+CREATE TABLE categories (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  description TEXT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### Products Table
+```sql
+CREATE TABLE products (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  price INTEGER NOT NULL DEFAULT 0,
+  stock INTEGER NOT NULL DEFAULT 0,
+  category_id INTEGER REFERENCES categories(id) ON DELETE SET NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_products_category_id ON products(category_id);
+```
+
+**Foreign Key Behavior:**
+- `category_id` references `categories(id)`
+- `ON DELETE SET NULL`: If a category is deleted, products in that category will have `category_id` set to NULL
 
 ## Development
 
-### Regenerate Swagger Documentation
+### Project Structure
+```
+category-management-api/
+├── main.go                 # Application entry point & dependency injection
+├── .env                    # Environment configuration
+├── .env.example           # Example environment file
+├── go.mod                 # Go module dependencies
+├── database/
+│   ├── postgres.go        # PostgreSQL connection
+│   └── migration.go       # Database migrations
+├── models/
+│   ├── category.go        # Category data structures
+│   └── product.go         # Product data structures
+├── repositories/
+│   ├── category_repository.go  # Category data access
+│   └── product_repository.go   # Product data access (with JOINs)
+├── services/
+│   ├── category_service.go     # Category business logic
+│   └── product_service.go      # Product business logic
+├── handlers/
+│   ├── category_handler.go     # Category HTTP handlers
+│   └── product_handler.go      # Product HTTP handlers
+└── docs/                  # Swagger documentation (auto-generated)
+```
 
-After making changes to API endpoints or models:
+### Regenerate Swagger Docs
+If you modify API annotations in code:
 ```bash
+swag init
+# or
 ~/go/bin/swag init
 ```
 
-## Project Structure
+**Note:** Only `docs/docs.go` is required. The `swagger.json` and `swagger.yaml` files are optional exports.
 
+### Build
+```bash
+go build
 ```
-category-management-api/
-├── main.go              # Main application entry point
-├── handlers/            # HTTP request handlers
-│   └── category_handler.go
-├── models/              # Data models
-│   └── category.go
-├── database/            # In-memory database
-│   └── memori.go
-├── docs/                # Swagger documentation (auto-generated)
-│   ├── docs.go
-│   ├── swagger.json
-│   └── swagger.yaml
-├── .air.toml            # Air configuration for hot reload
-├── go.mod               # Go module dependencies
-└── README.md            # This file
-```
+
+- [Layered Architecture - Martin Fowler](https://martinfowler.com/bliki/PresentationDomainDataLayering.html)
+- [Clean Architecture - Uncle Bob](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html)
+- [Standard Go Project Layout](https://github.com/golang-standards/project-layout)
