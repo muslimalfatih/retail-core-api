@@ -8,7 +8,7 @@ import (
 
 // ProductRepository defines the interface for product data access
 type ProductRepository interface {
-	GetAll() ([]models.Product, error)
+	GetAll(name string) ([]models.Product, error)
 	GetByID(id int) (*models.Product, error)
 	Create(product models.Product) (*models.Product, error)
 	Update(id int, product models.Product) (*models.Product, error)
@@ -26,7 +26,8 @@ func NewProductRepository(db *sql.DB) ProductRepository {
 }
 
 // GetAll returns all products from database with category names (LEFT JOIN)
-func (r *productRepository) GetAll() ([]models.Product, error) {
+// Supports optional name filter for search functionality
+func (r *productRepository) GetAll(nameFilter string) ([]models.Product, error) {
 	query := `
 		SELECT 
 			p.id, 
@@ -38,10 +39,17 @@ func (r *productRepository) GetAll() ([]models.Product, error) {
 			p.created_at, 
 			p.updated_at 
 		FROM products p
-		LEFT JOIN categories c ON p.category_id = c.id
-		ORDER BY p.id
-	`
-	rows, err := r.db.Query(query)
+		LEFT JOIN categories c ON p.category_id = c.id`
+
+	args := []interface{}{}
+	if nameFilter != "" {
+		query += " WHERE p.name ILIKE $1"
+		args = append(args, "%"+nameFilter+"%")
+	}
+
+	query += " ORDER BY p.id"
+
+	rows, err := r.db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}

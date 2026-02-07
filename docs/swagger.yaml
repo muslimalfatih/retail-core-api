@@ -1,0 +1,623 @@
+basePath: /
+definitions:
+  models.BestSellingProduct:
+    description: Best selling product information
+    properties:
+      name:
+        example: Indomie Goreng
+        type: string
+      qty_sold:
+        example: 12
+        type: integer
+    type: object
+  models.Category:
+    description: Category information with ID, name and description
+    properties:
+      created_at:
+        example: "2024-01-30T12:00:00Z"
+        type: string
+      description:
+        example: Electronic devices and gadgets
+        type: string
+      id:
+        example: 1
+        type: integer
+      name:
+        example: Electronics
+        type: string
+      updated_at:
+        example: "2024-01-30T12:00:00Z"
+        type: string
+    required:
+    - name
+    type: object
+  models.CategoryInput:
+    description: Input model for creating or updating a category (ID is auto-generated)
+    properties:
+      description:
+        example: Electronic devices and gadgets
+        type: string
+      name:
+        example: Electronics
+        type: string
+    required:
+    - name
+    type: object
+  models.CheckoutItem:
+    description: Single item to be checked out
+    properties:
+      product_id:
+        example: 3
+        type: integer
+      quantity:
+        example: 5
+        type: integer
+    type: object
+  models.CheckoutRequest:
+    description: Request body for processing a checkout
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/models.CheckoutItem'
+        type: array
+    type: object
+  models.Product:
+    description: Product information with ID, name, price, stock, and category relationship
+    properties:
+      category_id:
+        example: 1
+        type: integer
+      category_name:
+        example: Electronics
+        type: string
+      created_at:
+        example: "2024-01-30T12:00:00Z"
+        type: string
+      id:
+        example: 1
+        type: integer
+      name:
+        example: iPhone 15 Pro
+        type: string
+      price:
+        example: 15000000
+        type: integer
+      stock:
+        example: 50
+        type: integer
+      updated_at:
+        example: "2024-01-30T12:00:00Z"
+        type: string
+    required:
+    - name
+    - price
+    - stock
+    type: object
+  models.ProductInput:
+    description: Input model for creating or updating a product (ID is auto-generated)
+    properties:
+      category_id:
+        example: 1
+        type: integer
+      name:
+        example: iPhone 15 Pro
+        type: string
+      price:
+        example: 15000000
+        type: integer
+      stock:
+        example: 50
+        type: integer
+    required:
+    - name
+    - price
+    - stock
+    type: object
+  models.Response:
+    description: Standard API response structure
+    properties:
+      data:
+        type: object
+      message:
+        example: Success
+        type: string
+      status:
+        example: true
+        type: boolean
+    type: object
+  models.SalesReport:
+    description: Sales summary report with revenue, transaction count, and best seller
+    properties:
+      best_selling_product:
+        $ref: '#/definitions/models.BestSellingProduct'
+      total_revenue:
+        example: 45000
+        type: integer
+      total_transactions:
+        example: 5
+        type: integer
+    type: object
+  models.Transaction:
+    description: Transaction information with details of purchased items
+    properties:
+      created_at:
+        example: "2026-02-08T12:00:00Z"
+        type: string
+      details:
+        items:
+          $ref: '#/definitions/models.TransactionDetail'
+        type: array
+      id:
+        example: 1
+        type: integer
+      total_amount:
+        example: 45000
+        type: integer
+    type: object
+  models.TransactionDetail:
+    description: Detail of a single item within a transaction
+    properties:
+      id:
+        example: 1
+        type: integer
+      product_id:
+        example: 3
+        type: integer
+      product_name:
+        example: Indomie Goreng
+        type: string
+      quantity:
+        example: 5
+        type: integer
+      subtotal:
+        example: 15000
+        type: integer
+      transaction_id:
+        example: 1
+        type: integer
+    type: object
+info:
+  contact:
+    email: support@example.com
+    name: API Support
+  description: |-
+    RESTful API for managing categories and products with full CRUD operations
+
+    ## Features:
+    - Category Management (Get all, Get by ID, Create, Update, Delete)
+    - Product Management (Get all with category names, Get by ID with category, Create, Update, Delete)
+    - Product Search by Name (case-insensitive partial match)
+    - Product-Category Relationship (Foreign key with JOIN operations)
+    - Transaction / Checkout (Process multi-item checkout with stock deduction)
+    - Sales Reports (Daily summary and date range reports with best selling product)
+
+    ## Response Format:
+    All endpoints return a standard response with:
+    - status (bool): Request success status
+    - message (string): Response message
+    - data (object): Response data (when applicable)
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  title: Category Management API
+  version: "1.0"
+paths:
+  /api/checkout:
+    post:
+      consumes:
+      - application/json
+      description: Process a checkout with multiple items. Validates product availability,
+        deducts stock, and creates a transaction.
+      parameters:
+      - description: Checkout request with items and quantities
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.CheckoutRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Checkout successful
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.Transaction'
+              type: object
+        "400":
+          description: Invalid request body or validation error
+          schema:
+            $ref: '#/definitions/models.Response'
+        "500":
+          description: Server error or insufficient stock
+          schema:
+            $ref: '#/definitions/models.Response'
+      summary: Process checkout
+      tags:
+      - Transactions
+  /api/report:
+    get:
+      description: Get sales summary for a specific date range including total revenue,
+        transaction count, and best selling product
+      parameters:
+      - description: Start date (YYYY-MM-DD format)
+        example: '"2026-01-01"'
+        in: query
+        name: start_date
+        required: true
+        type: string
+      - description: End date (YYYY-MM-DD format)
+        example: '"2026-02-01"'
+        in: query
+        name: end_date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Sales report retrieved successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.SalesReport'
+              type: object
+        "400":
+          description: Missing required query parameters
+          schema:
+            $ref: '#/definitions/models.Response'
+        "500":
+          description: Failed to get report
+          schema:
+            $ref: '#/definitions/models.Response'
+      summary: Get sales report by date range
+      tags:
+      - Reports
+  /api/report/today:
+    get:
+      description: Get sales summary for today including total revenue, transaction
+        count, and best selling product
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Daily sales report retrieved successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.SalesReport'
+              type: object
+        "500":
+          description: Failed to get daily report
+          schema:
+            $ref: '#/definitions/models.Response'
+      summary: Get today's sales report
+      tags:
+      - Reports
+  /categories:
+    get:
+      description: Retrieve a list of all categories
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully retrieved all categories
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/models.Category'
+                  type: array
+              type: object
+      summary: Get all categories
+      tags:
+      - Categories
+    post:
+      consumes:
+      - application/json
+      description: Add a new category to the database
+      parameters:
+      - description: Category object that needs to be added
+        in: body
+        name: category
+        required: true
+        schema:
+          $ref: '#/definitions/models.CategoryInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Category created successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.Category'
+              type: object
+        "400":
+          description: Invalid request body or validation error
+          schema:
+            $ref: '#/definitions/models.Response'
+      summary: Create a new category
+      tags:
+      - Categories
+  /categories/{id}:
+    delete:
+      description: Delete a category by its ID
+      parameters:
+      - description: Category ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Category deleted successfully
+          schema:
+            $ref: '#/definitions/models.Response'
+        "400":
+          description: Invalid category ID
+          schema:
+            $ref: '#/definitions/models.Response'
+        "404":
+          description: Category not found
+          schema:
+            $ref: '#/definitions/models.Response'
+      summary: Delete a category
+      tags:
+      - Categories
+    get:
+      description: Retrieve details of a specific category by its ID
+      parameters:
+      - description: Category ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Category retrieved successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.Category'
+              type: object
+        "400":
+          description: Invalid category ID
+          schema:
+            $ref: '#/definitions/models.Response'
+        "404":
+          description: Category not found
+          schema:
+            $ref: '#/definitions/models.Response'
+      summary: Get a category by ID
+      tags:
+      - Categories
+    put:
+      consumes:
+      - application/json
+      description: Update an existing category by its ID
+      parameters:
+      - description: Category ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Updated category object
+        in: body
+        name: category
+        required: true
+        schema:
+          $ref: '#/definitions/models.CategoryInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Category updated successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.Category'
+              type: object
+        "400":
+          description: Invalid request body or validation error
+          schema:
+            $ref: '#/definitions/models.Response'
+        "404":
+          description: Category not found
+          schema:
+            $ref: '#/definitions/models.Response'
+      summary: Update a category
+      tags:
+      - Categories
+  /health:
+    get:
+      description: Check if the API server is running
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Server is running
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Health check endpoint
+      tags:
+      - Health
+  /products:
+    get:
+      description: Retrieve a list of all products with their category names. Supports
+        optional search by name.
+      parameters:
+      - description: Search product by name (case-insensitive partial match)
+        in: query
+        name: name
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully retrieved all products
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/models.Product'
+                  type: array
+              type: object
+      summary: Get all products
+      tags:
+      - Products
+    post:
+      consumes:
+      - application/json
+      description: Add a new product to the database
+      parameters:
+      - description: Product object that needs to be added
+        in: body
+        name: product
+        required: true
+        schema:
+          $ref: '#/definitions/models.ProductInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Product created successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.Product'
+              type: object
+        "400":
+          description: Invalid request body or validation error
+          schema:
+            $ref: '#/definitions/models.Response'
+      summary: Create a new product
+      tags:
+      - Products
+  /products/{id}:
+    delete:
+      description: Delete a product by its ID
+      parameters:
+      - description: Product ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Product deleted successfully
+          schema:
+            $ref: '#/definitions/models.Response'
+        "400":
+          description: Invalid product ID
+          schema:
+            $ref: '#/definitions/models.Response'
+        "404":
+          description: Product not found
+          schema:
+            $ref: '#/definitions/models.Response'
+      summary: Delete a product
+      tags:
+      - Products
+    get:
+      description: Retrieve details of a specific product by its ID with category
+        name
+      parameters:
+      - description: Product ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Product retrieved successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.Product'
+              type: object
+        "400":
+          description: Invalid product ID
+          schema:
+            $ref: '#/definitions/models.Response'
+        "404":
+          description: Product not found
+          schema:
+            $ref: '#/definitions/models.Response'
+      summary: Get a product by ID
+      tags:
+      - Products
+    put:
+      consumes:
+      - application/json
+      description: Update an existing product by its ID
+      parameters:
+      - description: Product ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Updated product object
+        in: body
+        name: product
+        required: true
+        schema:
+          $ref: '#/definitions/models.ProductInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Product updated successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/models.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.Product'
+              type: object
+        "400":
+          description: Invalid request body or validation error
+          schema:
+            $ref: '#/definitions/models.Response'
+        "404":
+          description: Product not found
+          schema:
+            $ref: '#/definitions/models.Response'
+      summary: Update a product
+      tags:
+      - Products
+schemes:
+- http
+- https
+swagger: "2.0"

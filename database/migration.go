@@ -54,5 +54,37 @@ func RunMigrations(db *sql.DB) error {
 	}
 	log.Println("Database indexes ready")
 
+	// Create transactions table
+	createTransactionsTable := `
+	CREATE TABLE IF NOT EXISTS transactions (
+		id SERIAL PRIMARY KEY,
+		total_amount INT NOT NULL,
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	);
+	`
+
+	_, err = db.Exec(createTransactionsTable)
+	if err != nil {
+		return err
+	}
+	log.Println("Transactions table ready")
+
+	// Create transaction_details table
+	createTransactionDetailsTable := `
+	CREATE TABLE IF NOT EXISTS transaction_details (
+		id SERIAL PRIMARY KEY,
+		transaction_id INT REFERENCES transactions(id) ON DELETE CASCADE,
+		product_id INT REFERENCES products(id),
+		quantity INT NOT NULL,
+		subtotal INT NOT NULL
+	);
+	`
+
+	_, err = db.Exec(createTransactionDetailsTable)
+	if err != nil {
+		return err
+	}
+	log.Println("Transaction details table ready")
+
 	return nil
 }

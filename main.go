@@ -31,7 +31,10 @@ type Config struct {
 // @description ## Features:
 // @description - Category Management (Get all, Get by ID, Create, Update, Delete)
 // @description - Product Management (Get all with category names, Get by ID with category, Create, Update, Delete)
+// @description - Product Search by Name (case-insensitive partial match)
 // @description - Product-Category Relationship (Foreign key with JOIN operations)
+// @description - Transaction / Checkout (Process multi-item checkout with stock deduction)
+// @description - Sales Reports (Daily summary and date range reports with best selling product)
 // @description
 // @description ## Response Format:
 // @description All endpoints return a standard response with:
@@ -173,6 +176,11 @@ func main() {
 	categoryHandler := handlers.NewCategoryHandler(categoryService)
 	productHandler := handlers.NewProductHandler(productService)
 
+	// Transaction
+	transactionRepo := repositories.NewTransactionRepository(db)
+	transactionService := services.NewTransactionService(transactionRepo)
+	transactionHandler := handlers.NewTransactionHandler(transactionService)
+
 	// Create a new ServeMux
 	mux := http.NewServeMux()
 
@@ -189,6 +197,13 @@ func main() {
 	// Product endpoints - using handler methods
 	mux.HandleFunc("/products", productHandler.HandleProducts)
 	mux.HandleFunc("/products/", productHandler.HandleProductByID)
+
+	// Transaction endpoints
+	mux.HandleFunc("/api/checkout", transactionHandler.HandleCheckout)
+
+	// Report endpoints
+	mux.HandleFunc("/api/report/today", transactionHandler.HandleDailyReport)
+	mux.HandleFunc("/api/report", transactionHandler.HandleReportByRange)
 
 	// API Documentation endpoint
 	mux.HandleFunc("/docs/", httpSwagger.WrapHandler)
@@ -209,6 +224,9 @@ func main() {
 	log.Println("  GET    /products/{id}")
 	log.Println("  PUT    /products/{id}")
 	log.Println("  DELETE /products/{id}")
+	log.Println("  POST   /api/checkout")
+	log.Println("  GET    /api/report/today")
+	log.Println("  GET    /api/report?start_date=&end_date=")
 
 	// Wrap the entire mux with CORS middleware
 	handler := corsMiddlewareWrapper(mux)
