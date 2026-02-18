@@ -1,6 +1,6 @@
-# Category & Product Management API
+# Retail Core API
 
-RESTful API for managing categories, products, transactions, and sales reports with layered architecture pattern, built with Go and PostgreSQL.
+RESTful API for a Point-of-Sale (POS) system manages categories, products, transactions, and sales reports. Built with Go, Gin, and PostgreSQL using a layered architecture.
 
 ## Architecture
 
@@ -91,6 +91,17 @@ This project implements **Layered Architecture** (also known as N-Tier Architect
 - Standard JSON response format
 - Production deployment support (Zeabur)
 
+## Tech Stack
+
+| | |
+|---|---|
+| Language | Go 1.24 |
+| HTTP framework | [Gin](https://github.com/gin-gonic/gin) v1.11 |
+| Database driver | [pgx/v5](https://github.com/jackc/pgx) (stdlib mode) |
+| Config | [spf13/viper](https://github.com/spf13/viper) |
+| Docs | [swaggo/swag](https://github.com/swaggo/swag) + gin-swagger |
+| Database | PostgreSQL (Supabase) |
+
 ## Getting Started
 
 ### Prerequisites
@@ -103,8 +114,8 @@ This project implements **Layered Architecture** (also known as N-Tier Architect
 
 1. Clone the repository
 ```bash
-git clone <your-repo-url>
-cd category-management-api
+git clone https://github.com/muslimalfatih/retail-core-api.git
+cd retail-core-api
 ```
 
 2. Install dependencies
@@ -119,11 +130,13 @@ cp .env.example .env
 # Important: Add ?sslmode=require to your DB_CONN
 ```
 
-**Example `.env`:**
+`.env` reference:
 ```env
-DB_CONN=postgresql://postgres.[PROJECT_ID]:[PASSWORD]@aws-1-ap-south-1.pooler.supabase.com:6543/postgres?sslmode=require
+DB_CONN=postgresql://postgres.[PROJECT_ID]:[PASSWORD]@aws-1-ap-south-1.pooler.supabase.com:6543/postgres
 PORT=8080
-APP_ENV=local
+APP_ENV=development
+APP_URL=                    # set to your domain in production (e.g. retail-core-api.zeabur.app)
+JWT_SECRET=change-me        # used for JWT auth
 ```
 
 4. Run the application
@@ -151,31 +164,35 @@ GET /health - Check API status
 
 #### Categories
 ```
-GET    /categories     - Get all categories
-POST   /categories     - Create a new category
-GET    /categories/:id - Get category by ID
-PUT    /categories/:id - Update category
-DELETE /categories/:id - Delete category
+GET    /categories                List all categories
+POST   /categories                Create category
+GET    /categories/:id            Get category by ID
+PUT    /categories/:id            Update category
+DELETE /categories/:id            Delete category
+GET    /categories/:id/products   List products in category
 ```
 
 #### Products
 ```
-GET    /products     - Get all products (with category names)
-POST   /products     - Create a new product
-GET    /products/:id - Get product by ID (with category name)
-PUT    /products/:id - Update product
-DELETE /products/:id - Delete product
+GET    /products        List all products (optional ?name= search)
+POST   /products        Create product
+GET    /products/:id    Get product by ID
+PUT    /products/:id    Update product
+DELETE /products/:id    Delete product
 ```
 
 #### Transactions
 ```
-POST   /api/checkout       - Process multi-item checkout
+POST   /api/checkout             Process checkout
+GET    /api/transactions          List transactions (paginated, ?page=&limit=)
+GET    /api/transactions/:id      Get transaction by ID
 ```
 
-#### Reports
+#### Reports & Dashboard
 ```
-GET    /api/report/today   - Get today's sales report
-GET    /api/report          - Get sales report by date range (?start_date=&end_date=)
+GET    /api/dashboard             Dashboard statistics
+GET    /api/report/today          Today's sales report
+GET    /api/report                Sales report (?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD)
 ```
 
 ### Request/Response Examples
@@ -403,48 +420,68 @@ CREATE TABLE transaction_details (
 
 ### Project Structure
 ```
-category-management-api/
-├── main.go                 # Application entry point & dependency injection
-├── .env                    # Environment configuration
-├── .env.example           # Example environment file
-├── go.mod                 # Go module dependencies
+retail-core-api/
+├── main.go                          # Entry point — DI wiring, router, server
+├── .env.example
+├── .air.toml                        # Hot reload config
+├── go.mod
+├── config/
+│   └── config.go                    # Viper config + SwaggerHost helpers
 ├── database/
-│   ├── postgres.go        # PostgreSQL connection
-│   └── migration.go       # Database migrations
+│   ├── postgres.go                  # Connection pool setup
+│   └── migration.go                 # Auto-migration on startup
 ├── models/
-│   ├── category.go        # Category data structures
-│   ├── product.go         # Product data structures
-│   └── transaction.go     # Transaction & report data structures
+│   ├── category.go
+│   ├── product.go
+│   └── transaction.go               # Transaction, report, dashboard structs
 ├── repositories/
-│   ├── category_repository.go     # Category data access
-│   ├── product_repository.go      # Product data access (with JOINs)
-│   └── transaction_repository.go  # Transaction & report data access
+│   ├── category_repository.go
+│   ├── product_repository.go        # SQL JOIN for category name
+│   └── transaction_repository.go
 ├── services/
-│   ├── category_service.go        # Category business logic
-│   ├── product_service.go         # Product business logic
-│   └── transaction_service.go     # Transaction & report business logic
+│   ├── category_service.go
+│   ├── product_service.go
+│   └── transaction_service.go
 ├── handlers/
-│   ├── category_handler.go        # Category HTTP handlers
-│   ├── product_handler.go         # Product HTTP handlers
-│   └── transaction_handler.go     # Transaction & report HTTP handlers
-└── docs/                  # Swagger documentation (auto-generated)
+│   ├── category_handler.go
+│   ├── product_handler.go
+│   └── transaction_handler.go
+├── helpers/
+│   ├── response.go                  # Standard JSON response helpers
+│   ├── pagination.go                # ParsePagination, CalcTotalPages
+│   └── errors.go                    # Typed sentinel errors
+├── middleware/
+│   ├── cors.go                      # gin-contrib/cors
+│   ├── logger.go                    # Request logging
+│   └── auth.go                      # JWT auth middleware
+└── docs/                            # Swagger docs (auto-generated)
 ```
 
 ### Regenerate Swagger Docs
-If you modify API annotations in code:
+
+After modifying any `// @...` annotations:
 ```bash
-swag init
-# or
 ~/go/bin/swag init
 ```
 
-**Note:** Only `docs/docs.go` is required. The `swagger.json` and `swagger.yaml` files are optional exports.
-
 ### Build
 ```bash
-go build
+go build ./...
 ```
 
-- [Layered Architecture - Martin Fowler](https://martinfowler.com/bliki/PresentationDomainDataLayering.html)
-- [Clean Architecture - Uncle Bob](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html)
-- [Standard Go Project Layout](https://github.com/golang-standards/project-layout)
+### Run
+```bash
+go run main.go
+```
+
+## Deployment
+
+Deployed on [Zeabur](https://zeabur.com). Set these environment variables in your deployment dashboard:
+
+| Variable | Value |
+|---|---|
+| `DB_CONN` | PostgreSQL connection string |
+| `PORT` | `8080` |
+| `APP_ENV` | `production` |
+| `APP_URL` | Your domain (e.g. `retail-core-api.zeabur.app`) |
+| `JWT_SECRET` | A strong random secret |

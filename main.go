@@ -1,46 +1,34 @@
 package main
 
 import (
-	"category-management-api/database"
-	"category-management-api/docs"
-	"category-management-api/handlers"
-	"category-management-api/repositories"
-	"category-management-api/services"
-	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
-	"os"
-	"strings"
+	"retail-core-api/config"
+	"retail-core-api/database"
+	"retail-core-api/docs"
+	"retail-core-api/handlers"
+	"retail-core-api/helpers"
+	"retail-core-api/middleware"
+	"retail-core-api/repositories"
+	"retail-core-api/services"
 
-	"github.com/spf13/viper"
-	httpSwagger "github.com/swaggo/http-swagger"
+	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
-// Config holds application configuration
-type Config struct {
-	Port   string `mapstructure:"PORT"`
-	DBConn string `mapstructure:"DB_CONN"`
-	AppEnv string `mapstructure:"APP_ENV"`
-}
-
-// @title Category Management API
+// @title Retail Core API
 // @version 1.0
-// @description RESTful API for managing categories and products with full CRUD operations
+// @description RESTful API for managing categories, products, transactions, and POS operations
 // @description
 // @description ## Features:
-// @description - Category Management (Get all, Get by ID, Create, Update, Delete)
-// @description - Product Management (Get all with category names, Get by ID with category, Create, Update, Delete)
+// @description - Category Management (CRUD)
+// @description - Product Management (CRUD with category relationship)
 // @description - Product Search by Name (case-insensitive partial match)
-// @description - Product-Category Relationship (Foreign key with JOIN operations)
-// @description - Transaction / Checkout (Process multi-item checkout with stock deduction)
-// @description - Sales Reports (Daily summary and date range reports with best selling product)
-// @description
-// @description ## Response Format:
-// @description All endpoints return a standard response with:
-// @description - status (bool): Request success status
-// @description - message (string): Response message
-// @description - data (object): Response data (when applicable)
+// @description - Transaction / Checkout (multi-item checkout with stock deduction)
+// @description - Sales Reports (daily summary, date range, best selling product)
+// @description - Dashboard Statistics
 
 // @contact.name API Support
 // @contact.email support@example.com
@@ -51,104 +39,26 @@ type Config struct {
 // @BasePath /
 // @schemes http https
 
-// HealthCheck godoc
-// @Summary Health check endpoint
-// @Description Check if the API server is running
-// @Tags Health
-// @Produce json
-// @Success 200 {object} map[string]string "Server is running"
-// @Router /health [get]
-func HealthCheck(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
-		"status":  "OK",
-		"message": "Server is running successfully",
-	})
-}
-
-// RootHandler shows API information
-func RootHandler(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/" {
-		http.NotFound(w, r)
-		return
-	}
-	
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"name":        "Category Management API",
-		"version":     "1.0",
-		"status":      "running",
-		"description": "RESTful API for managing categories and products",
-		"endpoints": map[string]string{
-			"documentation": "/docs/index.html",
-			"health":        "/health",
-			"categories":    "/categories",
-			"products":      "/products",
-		},
-	})
-}
-
-// Global CORS middleware that wraps ALL handlers
-type corsMiddleware struct {
-	handler http.Handler
-}
-
-func (c *corsMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Set CORS headers for all requests
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Accept, X-Requested-With")
-	w.Header().Set("Access-Control-Allow-Credentials", "true")
-	w.Header().Set("Access-Control-Max-Age", "86400")
-
-	// Handle preflight requests
-	if r.Method == "OPTIONS" {
-		w.WriteHeader(http.StatusNoContent)
-		return
-	}
-
-	// Call the next handler
-	c.handler.ServeHTTP(w, r)
-}
-
-func corsMiddlewareWrapper(handler http.Handler) http.Handler {
-	return &corsMiddleware{handler: handler}
-}
-
 func main() {
-	// Load configuration with Viper
-	viper.AutomaticEnv()
-	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-
-	if _, err := os.Stat(".env"); err == nil {
-		viper.SetConfigFile(".env")
-		_ = viper.ReadInConfig()
+	// Load configuration
+	cfg, err := config.LoadConfig()
+	if err != nil {
+		log.Fatal("Failed to load config:", err)
 	}
 
-	config := Config{
-		Port:   viper.GetString("PORT"),
-		DBConn: viper.GetString("DB_CONN"),
-		AppEnv: viper.GetString("APP_ENV"),
-	}
+	// Configure Swagger
+	docs.SwaggerInfo.Host = cfg.SwaggerHost()
+	docs.SwaggerInfo.Schemes = cfg.SwaggerSchemes()
 
-	// Set default port
-	if config.Port == "" {
-		config.Port = "8080"
-	}
-
-	// Configure Swagger for production (HTTPS) or local (HTTP)
-	if config.AppEnv == "production" {
-		docs.SwaggerInfo.Host = "category-management-apis.zeabur.app"
-		docs.SwaggerInfo.Schemes = []string{"https"}
-	} else {
-		docs.SwaggerInfo.Host = "localhost:" + config.Port
-		docs.SwaggerInfo.Schemes = []string{"http"}
+	// Set Gin mode
+	if cfg.IsProduction() {
+		gin.SetMode(gin.ReleaseMode)
 	}
 
 	// ============================================
 	// DATABASE CONNECTION
 	// ============================================
-	db, err := database.InitDB(config.DBConn)
+	db, err := database.InitDB(cfg.DBConn)
 	if err != nil {
 		log.Fatal("Failed to initialize database:", err)
 	}
@@ -161,78 +71,111 @@ func main() {
 	}
 
 	// ============================================
-	// LAYERED ARCHITECTURE - DEPENDENCY INJECTION
+	// DEPENDENCY INJECTION
 	// ============================================
 
-	// 1. Initialize Repository Layer (Data Access)
+	// Repositories
 	categoryRepo := repositories.NewCategoryRepository(db)
 	productRepo := repositories.NewProductRepository(db)
+	transactionRepo := repositories.NewTransactionRepository(db)
 
-	// 2. Initialize Service Layer (Business Logic)
+	// Services
 	categoryService := services.NewCategoryService(categoryRepo)
 	productService := services.NewProductService(productRepo, categoryRepo)
-
-	// 3. Initialize Handler Layer (HTTP)
-	categoryHandler := handlers.NewCategoryHandler(categoryService)
-	productHandler := handlers.NewProductHandler(productService)
-
-	// Transaction
-	transactionRepo := repositories.NewTransactionRepository(db)
 	transactionService := services.NewTransactionService(transactionRepo)
+
+	// Handlers
+	categoryHandler := handlers.NewCategoryHandler(categoryService, productService)
+	productHandler := handlers.NewProductHandler(productService)
 	transactionHandler := handlers.NewTransactionHandler(transactionService)
 
-	// Create a new ServeMux
-	mux := http.NewServeMux()
+	// ============================================
+	// ROUTER SETUP
+	// ============================================
+	r := gin.New()
+	r.Use(middleware.Logger())
+	r.Use(gin.Recovery())
+	r.Use(middleware.CORS())
 
-	// Root endpoint - API information
-	mux.HandleFunc("/", RootHandler)
+	// ── Health & Info ──────────────────────────
+	r.GET("/health", func(c *gin.Context) {
+		helpers.OK(c, "Server is running successfully", gin.H{"status": "OK"})
+	})
 
-	// Health check endpoint
-	mux.HandleFunc("/health", HealthCheck)
+	r.GET("/", func(c *gin.Context) {
+		helpers.OK(c, "Retail Core API", gin.H{
+			"name":        "Retail Core API",
+			"version":     "1.0",
+			"status":      "running",
+			"description": "RESTful API for managing categories, products, and transactions",
+			"endpoints": gin.H{
+				"documentation": "/docs/index.html",
+				"health":        "/health",
+				"categories":    "/categories",
+				"products":      "/products",
+			},
+		})
+	})
 
-	// Category endpoints - using handler methods
-	mux.HandleFunc("/categories", categoryHandler.HandleCategories)
-	mux.HandleFunc("/categories/", categoryHandler.HandleCategoryByID)
+	// ── Swagger Documentation ─────────────────
+	r.GET("/docs/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
-	// Product endpoints - using handler methods
-	mux.HandleFunc("/products", productHandler.HandleProducts)
-	mux.HandleFunc("/products/", productHandler.HandleProductByID)
+	// ── Categories (public read) ──────────────
+	r.GET("/categories", categoryHandler.List)
+	r.GET("/categories/:id", categoryHandler.GetByID)
+	r.GET("/categories/:id/products", categoryHandler.GetProducts)
+	r.POST("/categories", categoryHandler.Create)
+	r.PUT("/categories/:id", categoryHandler.Update)
+	r.DELETE("/categories/:id", categoryHandler.Delete)
 
-	// Transaction endpoints
-	mux.HandleFunc("/api/checkout", transactionHandler.HandleCheckout)
+	// ── Products (public read) ────────────────
+	r.GET("/products", productHandler.List)
+	r.GET("/products/:id", productHandler.GetByID)
+	r.POST("/products", productHandler.Create)
+	r.PUT("/products/:id", productHandler.Update)
+	r.DELETE("/products/:id", productHandler.Delete)
 
-	// Report endpoints
-	mux.HandleFunc("/api/report/today", transactionHandler.HandleDailyReport)
-	mux.HandleFunc("/api/report", transactionHandler.HandleReportByRange)
+	// ── API group ─────────────────────────────
+	api := r.Group("/api")
+	{
+		// Transactions / Checkout
+		api.POST("/checkout", transactionHandler.Checkout)
+		api.GET("/transactions", transactionHandler.ListTransactions)
+		api.GET("/transactions/:id", transactionHandler.GetTransactionByID)
 
-	// API Documentation endpoint
-	mux.HandleFunc("/docs/", httpSwagger.WrapHandler)
+		// Dashboard
+		api.GET("/dashboard", transactionHandler.Dashboard)
 
-	// Start server with CORS middleware wrapping all routes
-	addr := "0.0.0.0:" + config.Port
+		// Reports
+		api.GET("/report/today", transactionHandler.DailyReport)
+		api.GET("/report", transactionHandler.ReportByRange)
+	}
+
+	// ── Start Server ──────────────────────────
+	addr := "0.0.0.0:" + cfg.Port
 	fmt.Printf("Server running on %s\n", addr)
-	fmt.Printf("API Documentation: http://localhost:%s/docs/index.html\n", config.Port)
+	fmt.Printf("API Documentation: http://localhost:%s/docs/index.html\n", cfg.Port)
 	log.Println("Available endpoints:")
 	log.Println("  GET    /health")
 	log.Println("  GET    /categories")
 	log.Println("  POST   /categories")
-	log.Println("  GET    /categories/{id}")
-	log.Println("  PUT    /categories/{id}")
-	log.Println("  DELETE /categories/{id}")
+	log.Println("  GET    /categories/:id")
+	log.Println("  PUT    /categories/:id")
+	log.Println("  DELETE /categories/:id")
+	log.Println("  GET    /categories/:id/products")
 	log.Println("  GET    /products")
 	log.Println("  POST   /products")
-	log.Println("  GET    /products/{id}")
-	log.Println("  PUT    /products/{id}")
-	log.Println("  DELETE /products/{id}")
+	log.Println("  GET    /products/:id")
+	log.Println("  PUT    /products/:id")
+	log.Println("  DELETE /products/:id")
 	log.Println("  POST   /api/checkout")
+	log.Println("  GET    /api/transactions")
+	log.Println("  GET    /api/transactions/:id")
+	log.Println("  GET    /api/dashboard")
 	log.Println("  GET    /api/report/today")
 	log.Println("  GET    /api/report?start_date=&end_date=")
 
-	// Wrap the entire mux with CORS middleware
-	handler := corsMiddlewareWrapper(mux)
-
-	err = http.ListenAndServe(addr, handler)
-	if err != nil {
+	if err := http.ListenAndServe(addr, r); err != nil {
 		log.Fatal("Failed to start server:", err)
 	}
 }

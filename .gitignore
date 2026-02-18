@@ -36,7 +36,7 @@ build-errors.log
 # Build output
 main
 *.exe
-category-management-api
+retail-core-api
 
 # Logs
 *.log
